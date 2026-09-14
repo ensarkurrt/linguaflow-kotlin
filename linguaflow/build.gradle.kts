@@ -1,5 +1,6 @@
 plugins {
   id("com.android.library")
+  id("app.cash.licensee")
   id("com.vanniktech.maven.publish")
 }
 
@@ -11,6 +12,19 @@ android {
   compileSdk = 36
   defaultConfig { minSdk = 24; consumerProguardFiles("consumer-rules.pro") }
   testOptions { unitTests.all { it.useJUnitPlatform() } }
+}
+
+licensee {
+  allow("Apache-2.0")
+  allowUrl("https://developer.android.com/studio/terms.html") {
+    because("Required Google Play Services SDK terms")
+  }
+  allowUrl("https://developer.android.com/guide/playcore/license") {
+    because("Required Google Play Core SDK terms")
+  }
+  allowUrl("https://developer.android.com/google/play/integrity/overview#tos") {
+    because("Required Google Play Integrity SDK terms")
+  }
 }
 
 mavenPublishing {

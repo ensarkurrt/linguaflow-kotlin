@@ -30,22 +30,18 @@ import com.google.gson.annotations.SerializedName
  *
  *
  * @param accepted
- * @param recordedKeyCount
  * @param reason
  * @param duplicate
  */
 
 
-data class MissingKeyReportResponseDto (
+data class RuntimeMetricReportResponseDto (
 
     @SerializedName("accepted")
     val accepted: kotlin.Boolean,
 
-    @SerializedName("recordedKeyCount")
-    val recordedKeyCount: kotlin.Int,
-
     @SerializedName("reason")
-    val reason: MissingKeyReportResponseDto.Reason? = null,
+    val reason: RuntimeMetricReportResponseDto.Reason? = null,
 
     @SerializedName("duplicate")
     val duplicate: kotlin.Boolean? = null
@@ -55,10 +51,9 @@ data class MissingKeyReportResponseDto (
     /**
      *
      *
-     * Values: disabled,telemetry_ticket_required
+     * Values: telemetry_ticket_required
      */
     enum class Reason(val value: kotlin.String) {
-        @SerializedName(value = "disabled") disabled("disabled"),
         @SerializedName(value = "telemetry_ticket_required") telemetry_ticket_required("telemetry_ticket_required");
     }
 

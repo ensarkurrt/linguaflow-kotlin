@@ -24,6 +24,7 @@
 package dev.linguaflow.generated
 
 import dev.linguaflow.generated.DeliveryRolloutResponseDto
+import dev.linguaflow.generated.DeliveryRuntimeTelemetryResponseDto
 import dev.linguaflow.generated.MissingKeyTelemetryPolicyResponseDto
 
 import com.google.gson.annotations.SerializedName
@@ -46,6 +47,7 @@ import com.google.gson.annotations.SerializedName
  * @param overlays
  * @param overlay
  * @param missingKeyTelemetry
+ * @param runtimeTelemetry
  */
 
 
@@ -94,17 +96,20 @@ data class DeliveryManifestResponseDto (
     val overlay: kotlin.String?,
 
     @SerializedName("missingKeyTelemetry")
-    val missingKeyTelemetry: MissingKeyTelemetryPolicyResponseDto
+    val missingKeyTelemetry: MissingKeyTelemetryPolicyResponseDto,
+
+    @SerializedName("runtimeTelemetry")
+    val runtimeTelemetry: DeliveryRuntimeTelemetryResponseDto?
 
 ) {
 
     /**
      *
      *
-     * Values: _1
+     * Values: _2
      */
     enum class Version(val value: kotlin.Int) {
-        @SerializedName(value = "1") _1(1);
+        @SerializedName(value = "2") _2(2);
     }
     /**
      *

@@ -2,6 +2,8 @@ package dev.linguaflow
 
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -53,9 +55,13 @@ class UrlConnectionTransport : HttpTransport {
       }
       val status = connection.responseCode
       val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+      val declaredLength = connection.contentLengthLong
+      if (declaredLength > MAX_RESPONSE_BYTES) {
+        throw LinguaFlowException("LinguaFlow response is too large")
+      }
       HttpResult(
         status = status,
-        body = stream?.bufferedReader()?.use { it.readText() } ?: "",
+        body = stream?.use { readBoundedUtf8(it, MAX_RESPONSE_BYTES) } ?: "",
         headers = connection.headerFields
           .filterKeys { it != null }
           .mapValues { it.value.joinToString(",") },
@@ -68,5 +74,23 @@ class UrlConnectionTransport : HttpTransport {
   companion object {
     private const val CONNECT_TIMEOUT_MILLISECONDS = 10_000
     private const val READ_TIMEOUT_MILLISECONDS = 30_000
+    private const val MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+
   }
+}
+
+internal fun readBoundedUtf8(input: InputStream, maximumBytes: Int): String {
+  val output = ByteArrayOutputStream()
+  val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+  var total = 0
+  while (true) {
+    val count = input.read(buffer)
+    if (count < 0) break
+    total += count
+    if (total > maximumBytes) {
+      throw LinguaFlowException("LinguaFlow response is too large")
+    }
+    output.write(buffer, 0, count)
+  }
+  return output.toString(Charsets.UTF_8.name())
 }

@@ -30,11 +30,11 @@ import com.google.gson.annotations.SerializedName
  *
  *
  * @param requestId
- * @param releaseId
  * @param locale
  * @param appVersion
- * @param platform
  * @param propertyKeys
+ * @param releaseId
+ * @param platform
  */
 
 
@@ -43,20 +43,20 @@ data class MissingKeyReportRequestDto (
     @SerializedName("requestId")
     val requestId: java.util.UUID,
 
-    @SerializedName("releaseId")
-    val releaseId: java.util.UUID,
-
     @SerializedName("locale")
     val locale: kotlin.String,
 
     @SerializedName("appVersion")
     val appVersion: kotlin.String = "",
 
-    @SerializedName("platform")
-    val platform: MissingKeyReportRequestDto.Platform,
-
     @SerializedName("keys")
-    val propertyKeys: kotlin.collections.List<kotlin.String>
+    val propertyKeys: kotlin.collections.List<kotlin.String>,
+
+    @SerializedName("releaseId")
+    val releaseId: java.util.UUID? = null,
+
+    @SerializedName("platform")
+    val platform: MissingKeyReportRequestDto.Platform? = null
 
 ) {
 

@@ -30,5 +30,11 @@ Play Integrity Standard token'ına bağlar, sunucu Google'da decode edip app/acc
 doğrular ve branch başına kısa ömürlü delivery grant üretir.
 
 Eksik anahtar raporlaması için `.linguaconfig` içindeki `telemetry.missingKeys` değerini ve branch
-politikasını açın. SDK sinyalleri tekilleştirip partiler; telemetry hatası metin göstermeyi
+politikasını açın. SDK sürüm adını ve version code'u varsayılan olarak host uygulamanın
+`PackageManager` bilgisinden okur; `telemetry.appVersion` yalnız test veya özel sürüm etiketi için
+opsiyonel override'dır. SDK sinyalleri tekilleştirip partiler; telemetry hatası metin göstermeyi
 durdurmaz. Uygulama kapanırken `client.close()` coroutine scope'unu temizler.
+
+`PlayIntegrityProvider` yapılandırıldığında SDK ayrıca bundle indirme/parse, Delivery API ve ICU
+sonuçlarını toplu runtime telemetrisi olarak gönderir. Yalnız bütünlük doğrulanmış raporlar otomatik
+rollout sağlık kapılarında kullanılır.

@@ -4,7 +4,7 @@ import android.content.Context
 import dev.linguaflow.generated.DeliveryManifestResponseDto
 import org.json.JSONObject
 
-const val LINGUAFLOW_RUNTIME_CONTRACT_VERSION = 1
+const val LINGUAFLOW_RUNTIME_CONTRACT_VERSION = 2
 
 @JvmInline
 value class LfKey(val path: String)
@@ -50,6 +50,9 @@ data class LinguaFlowConfig(
     require(BRANCH_KEY_PATTERN.matches(branchKey)) { "Invalid branch delivery key" }
     require(overlay == null || OVERLAY_PATTERN.matches(overlay)) { "Invalid overlay slug" }
     require(cacheTtlSeconds >= 0) { "TTL cannot be negative" }
+    require(!bundledPath.startsWith('/') && !bundledPath.contains("..") && !bundledPath.contains("://")) {
+      "Bundled path must be an application-relative asset directory"
+    }
   }
 
   companion object {
@@ -98,6 +101,8 @@ data class LocaleManifest(
   val rolloutCandidateReleaseId: String,
   val rolloutPercentage: Int,
   val rolloutSelection: String,
+  val runtimeTelemetryToken: String?,
+  val runtimeTelemetryExpiresAt: String?,
 ) {
   fun toJson(): JSONObject = JSONObject()
     .put("version", version)
@@ -125,6 +130,12 @@ data class LocaleManifest(
       JSONObject()
         .put("percentage", rolloutPercentage)
         .put("selection", rolloutSelection),
+    )
+    .put(
+      "runtimeTelemetry",
+      runtimeTelemetryToken?.let {
+        JSONObject().put("token", it).put("expiresAt", runtimeTelemetryExpiresAt)
+      },
     )
 
   companion object {
@@ -157,6 +168,8 @@ data class LocaleManifest(
         rolloutCandidateReleaseId = contract.rollout.candidateReleaseId,
         rolloutPercentage = contract.rollout.percentage,
         rolloutSelection = contract.rollout.selection.value,
+        runtimeTelemetryToken = contract.runtimeTelemetry?.token,
+        runtimeTelemetryExpiresAt = contract.runtimeTelemetry?.expiresAt?.toString(),
       )
     }
   }
@@ -178,11 +191,14 @@ fun interface DeviceIntegrityProvider {
   suspend fun obtainGrant(branchKey: String): String
 }
 
-class LinguaFlowException(
+open class LinguaFlowException(
   message: String,
   val statusCode: Int? = null,
   cause: Throwable? = null,
 ) : RuntimeException(message, cause)
+
+class BundlePayloadException(cause: Throwable? = null) :
+  LinguaFlowException("Invalid LinguaFlow translation bundle", cause = cause)
 
 internal fun org.json.JSONArray.strings() = (0 until length()).map { getString(it) }
 internal fun JSONObject.stringsMap() = keys().asSequence().associateWith { getString(it) }

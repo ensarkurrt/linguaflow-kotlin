@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,7 +22,10 @@ class LinguaFlowClient(
   private val store = LocalizationStore(context, config)
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val api = DeliveryApi(config, store.installationId, integrityProvider, transport)
-  private val missingKeys = MissingKeyReporter(config, api, scope) { manifest }
+  private val missingKeys = MissingKeyReporter(config, context, api, scope) { manifest }
+  private val runtimeMetrics = RuntimeMetricReporter(
+    config, context, api, scope, { manifest }, integrityProvider != null,
+  )
   private val mutableState = MutableStateFlow(LinguaFlowState(selectedLocale = store.selectedLocale))
   private var manifest: LocaleManifest? = null
   private var bundle: JSONObject? = null
@@ -39,6 +43,7 @@ class LinguaFlowClient(
     try {
       activateRemote(deviceLocale)
     } catch (error: Throwable) {
+      if (error is CancellationException) throw error
       if (!config.offlineEnabled || !activateOffline(deviceLocale, error)) throw error
     } finally {
       mutableState.value = state.value.copy(loading = false)
@@ -60,7 +65,10 @@ class LinguaFlowClient(
   fun text(message: LfMessage, fallback: String = ""): String =
     render(message.path, message.arguments, fallback)
 
-  suspend fun flushMissingKeys() = missingKeys.flush()
+  suspend fun flushMissingKeys() {
+    missingKeys.flush()
+    runtimeMetrics.flush()
+  }
 
   override fun close() {
     scope.cancel()
@@ -70,6 +78,7 @@ class LinguaFlowClient(
     val selected = state.value.selectedLocale
     val remoteManifest = api.manifest(selected ?: deviceLocale, selected != null)
     manifest = remoteManifest
+    runtimeMetrics.record(RuntimeMetricKind.delivery_request, RuntimeMetricOutcome.success)
     lastChecked = System.currentTimeMillis()
     store.saveManifest(remoteManifest)
 
@@ -87,12 +96,36 @@ class LinguaFlowClient(
       return
     }
 
-    when (val delivery = api.bundle(remoteManifest.resolvedLocale, cached?.etag)) {
+    val delivery = try {
+      api.bundle(remoteManifest.resolvedLocale, cached?.etag).also {
+        runtimeMetrics.record(RuntimeMetricKind.delivery_request, RuntimeMetricOutcome.success)
+      }
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      val outcome = when {
+        error is java.net.SocketTimeoutException -> RuntimeMetricOutcome.timeout
+        error is LinguaFlowException && (error.statusCode ?: 0) >= 500 -> RuntimeMetricOutcome.server_error
+        else -> RuntimeMetricOutcome.failure
+      }
+      runtimeMetrics.record(RuntimeMetricKind.delivery_request, outcome)
+      runtimeMetrics.record(
+        if (error is BundlePayloadException || error is org.json.JSONException) {
+          RuntimeMetricKind.bundle_parse
+        } else {
+          RuntimeMetricKind.bundle_download
+        },
+        RuntimeMetricOutcome.failure,
+      )
+      throw error
+    }
+    when (delivery) {
       BundleDelivery.NotModified -> {
         val current = cached ?: throw LinguaFlowException("Bundle returned 304 without cache")
         activate(current.data, BundleSource.DOWNLOADED, effectiveSelection)
       }
       is BundleDelivery.Content -> {
+        runtimeMetrics.record(RuntimeMetricKind.bundle_download, RuntimeMetricOutcome.success)
+        runtimeMetrics.record(RuntimeMetricKind.bundle_parse, RuntimeMetricOutcome.success)
         store.saveBundle(
           remoteManifest.resolvedLocale,
           StoredBundle(remoteManifest.releaseId, delivery.etag, delivery.data),
@@ -122,7 +155,7 @@ class LinguaFlowClient(
     val content = context.assets.open("${config.bundledPath}/$locale.json")
       .bufferedReader()
       .use { it.readText() }
-    JSONObject(content)
+    JSONObject(content).also(::validateTranslationBundle)
   }.getOrNull()
 
   private fun activate(
@@ -153,7 +186,14 @@ class LinguaFlowClient(
     }
     if (current !is String) return missing(path, fallback)
     val locale = Locale.forLanguageTag(state.value.resolvedLocale ?: "en")
-    return MessageFormat(current, locale).format(arguments)
+    return try {
+      MessageFormat(current, locale).format(arguments).also {
+        runtimeMetrics.record(RuntimeMetricKind.icu_format, RuntimeMetricOutcome.success)
+      }
+    } catch (error: RuntimeException) {
+      runtimeMetrics.record(RuntimeMetricKind.icu_format, RuntimeMetricOutcome.failure)
+      throw error
+    }
   }
 
   private fun missing(path: String, fallback: String): String {
